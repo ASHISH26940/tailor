@@ -36,33 +36,56 @@ tool = PythonAstREPLTool(locals={
 
 COLUMNS_INFO = str(list(df.columns)) + "\n" + str(df.dtypes.to_string())
 
-CODE_GEN_PROMPT = """You are a Python data analyst. You have a pandas DataFrame called `df` with these columns:
-{columns}
+CODE_GEN_PROMPT = (
+    "You have a pandas DataFrame called `df` with these columns:\n"
+    "{columns}\n\n"
+    "The libraries plt, sns, pd, np, os, uuid are already imported.\n\n"
+    "Write ONLY executable Python code (no explanation, no markdown) to answer: {question}\n\n"
+    "Rules:\n"
+    "- If a plot is needed, save with: plt.savefig(f'static/plot_{{uuid.uuid4().hex[:8]}}.png', bbox_inches='tight', dpi=100); plt.close()\n"
+    "- Print the final result\n"
+    "- Do NOT use plt.show()\n"
+    "- Keep code concise"
+)
 
-The libraries plt, sns, pd, np, os, uuid are already imported and available.
+CLASSIFY_PROMPT = (
+    "Is this question about analyzing, querying, or visualizing data from a dataset? "
+    "Answer ONLY 'yes' or 'no'.\n\n"
+    "Question: {question}"
+)
 
-Write ONLY Python code (no explanation, no markdown fences) to answer this question:
-{question}
+CHAT_PROMPT = (
+    "You are a friendly assistant for a Titanic dataset explorer app. "
+    "The user said: \"{question}\"\n\n"
+    "This is not a data question, so just respond conversationally. "
+    "Mention that you can help analyze the Titanic dataset if they have questions about it."
+)
 
-Rules:
-- If a plot is requested, save it with: plt.savefig(f'static/plot_{{uuid.uuid4().hex[:8]}}.png', bbox_inches='tight') and plt.close()
-- Print the final result so it appears in output
-- Do NOT use plt.show()
-- Keep code concise"""
-
-FORMAT_PROMPT = """You are a helpful data analyst. The user asked: "{question}"
-
-The Python code produced this output:
-{result}
-
-{image_note}
-
-Give a clear, concise answer based on this output. If there was an error, explain what went wrong simply."""
+FORMAT_PROMPT = (
+    "User asked: \"{question}\"\n\n"
+    "Code output:\n{result}\n\n"
+    "{image_note}\n"
+    "Give a clear, concise answer based on this output."
+)
+GREETINGS = {"hello", "hi", "hey", "hallo", "hola", "howdy", "good morning", "good evening",
+             "good afternoon", "how are you", "whats up", "what's up", "sup", "yo", "greetings"}
 
 
 def run_query(question: str) -> dict:
-    import glob
+    q_lower = question.strip().lower().rstrip("!?.,")
 
+    if q_lower in GREETINGS or len(q_lower.split()) <= 3 and any(g in q_lower for g in GREETINGS):
+        chat_response = llm.invoke(CHAT_PROMPT.format(question=question))
+        return {"text": chat_response.content.strip(), "images": []}
+
+    classify = llm.invoke(CLASSIFY_PROMPT.format(question=question))
+    is_data_question = "yes" in classify.content.strip().lower()
+
+    if not is_data_question:
+        chat_response = llm.invoke(CHAT_PROMPT.format(question=question))
+        return {"text": chat_response.content.strip(), "images": []}
+
+    import glob
     before_plots = set(glob.glob("static/plot_*.png"))
 
     code_response = llm.invoke(CODE_GEN_PROMPT.format(columns=COLUMNS_INFO, question=question))
@@ -84,7 +107,7 @@ def run_query(question: str) -> dict:
 
     format_response = llm.invoke(FORMAT_PROMPT.format(
         question=question,
-        result=result if result else "(no text output — likely a plot was generated)",
+        result=result if result else "(no text output — a plot was generated)",
         image_note=image_note
     ))
 
