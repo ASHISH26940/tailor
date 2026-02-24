@@ -61,6 +61,10 @@ Give a clear, concise answer based on this output. If there was an error, explai
 
 
 def run_query(question: str) -> dict:
+    import glob
+
+    before_plots = set(glob.glob("static/plot_*.png"))
+
     code_response = llm.invoke(CODE_GEN_PROMPT.format(columns=COLUMNS_INFO, question=question))
     code = code_response.content.strip()
     code = code.replace("```python", "").replace("```", "").strip()
@@ -72,16 +76,11 @@ def run_query(question: str) -> dict:
     except Exception as e:
         result = f"Error: {e}"
 
-    images = []
-    import glob
-    current_plots = glob.glob("static/plot_*.png")
-    for p in current_plots:
-        p_normalized = p.replace("\\", "/")
-        images.append(f"/{p_normalized}")
+    after_plots = set(glob.glob("static/plot_*.png"))
+    new_plots = after_plots - before_plots
+    images = [f"/{p.replace(chr(92), '/')}" for p in new_plots]
 
-    image_note = ""
-    if images:
-        image_note = "A plot image was saved and will be shown to the user."
+    image_note = "A chart was generated and will be shown to the user." if images else ""
 
     format_response = llm.invoke(FORMAT_PROMPT.format(
         question=question,
