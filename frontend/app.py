@@ -3,7 +3,7 @@ import requests
 import json
 from urllib.parse import urljoin
 
-BACKEND_URL = "http://localhost:8000"
+BACKEND_URL = "https://tailor-mcju.onrender.com"
 
 st.set_page_config(page_title="Titanic Dataset Chatbot", page_icon="🚢", layout="wide")
 
